@@ -1,0 +1,51 @@
+[project]
+name = "sarvo-social-media-post"
+version = "0.1.0"
+description = "Automated AI podcast -> YouTube pipeline (state-machine over MongoDB)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # API + settings
+    "fastapi>=0.138.1",
+    "uvicorn[standard]>=0.49.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    # MongoDB (async ODM built on motor + pydantic v2)
+    "beanie>=2.1.0",
+    # AI: script, TTS, image
+    "openai>=2.9.0",
+    # Media
+    "pillow>=11.4.0",
+    "pydub>=0.25.1",
+    "imageio-ffmpeg>=0.6.0",  # bundles a full ffmpeg binary (no host install needed)
+    # YouTube Data API v3
+    "google-api-python-client>=2.190.0",
+    "google-auth-oauthlib>=1.2.2",
+    "google-auth-httplib2>=0.2.0",
+    # Scheduling (local; AWS EventBridge later)
+    "apscheduler>=3.11.0",
+    # Prompt templates (prompts/*.yaml)
+    "pyyaml>=6.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.15.20",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
