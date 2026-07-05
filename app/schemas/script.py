@@ -4,7 +4,17 @@ must fill, plus the API request/response DTOs for the human-review checkpoint.
 
 from pydantic import BaseModel, Field
 
-from app.models.episode import DialogueTurn, EpisodeStatus
+from app.models.episode import Blueprint, DialogueTurn, EpisodeStatus
+
+
+class BlueprintRead(BaseModel):
+    """The strategist's plan, returned for your review before scripting."""
+
+    episode_id: str
+    status: EpisodeStatus
+    topic: str
+    blueprint: Blueprint | None
+    cost_usd: float
 
 
 class GeneratedScript(BaseModel):

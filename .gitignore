@@ -219,3 +219,7 @@ __marimo__/
 
 # Generated media (audio/images/video)
 media/
+
+# YouTube OAuth secrets (never commit)
+client_secret.json
+token.json

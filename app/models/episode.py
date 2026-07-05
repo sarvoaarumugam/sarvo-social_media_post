@@ -37,6 +37,36 @@ class DialogueTurn(BaseModel):
     text: str
 
 
+class TurnTiming(BaseModel):
+    """When each dialogue turn starts/ends in the final audio (drives captions)."""
+
+    index: int
+    start: float  # seconds
+    end: float
+
+
+class OutlineSection(BaseModel):
+    """One planned section of the episode, with its retention devices."""
+
+    heading: str
+    beats: list[str]  # concrete talking points (example/story/number/scenario)
+    pattern_interrupt: str  # the change-up planned inside this section
+    open_loop: str  # the tease into the NEXT section
+
+
+class Blueprint(BaseModel):
+    """The strategist's plan (stage 1) that the scriptwriter (stage 2) must follow."""
+
+    titles: list[str]  # 3 click-worthy title options
+    thumbnail_concept: str
+    hooks: list[str]  # 3 cold-open variants
+    chosen_hook_index: int  # which hook the script should use (default 0)
+    big_loop: str  # question opened at the hook, closed near the end
+    outline: list[OutlineSection]
+    takeaway: str
+    cta: str
+
+
 class EpisodeMetadata(BaseModel):
     title: str | None = None
     description: str | None = None
@@ -48,6 +78,7 @@ class CostLog(BaseModel):
     script: float = 0.0
     tts: float = 0.0
     image: float = 0.0
+    metadata: float = 0.0
 
 
 class Episode(Document):
@@ -59,11 +90,14 @@ class Episode(Document):
     retry_count: int = 0
     error: str | None = None
 
+    blueprint: Blueprint | None = None  # strategist's plan (stage 1)
     script: list[DialogueTurn] = Field(default_factory=list)
 
     audio_path: str | None = None
     audio_duration_seconds: float | None = None
-    image_path: str | None = None
+    turn_timings: list[TurnTiming] = Field(default_factory=list)
+    image_path: str | None = None  # clean background used inside the video
+    thumbnail_path: str | None = None  # title-overlay variant used as YouTube thumbnail
     image_prompt: str | None = None  # the prompt that produced the current image
     video_path: str | None = None
 

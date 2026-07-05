@@ -9,7 +9,21 @@ around them. (For a literal `$`, write `$$`.)
 
 ## Files
 
-### `script.yaml` — the content stage
+### `style_dna.yaml` — the retention principles (used by strategy AND script)
+| Key | Used for | Placeholders |
+|-----|----------|--------------|
+| `dna` | The distilled "why top videos win" rules injected into both stages | — |
+
+Upgrade it from real videos you admire: put their transcripts (.txt) in `references/`
+and run `uv run python scripts/analyze_references.py`.
+
+### `strategy.yaml` — stage 1: the Strategist (runs BEFORE the script)
+| Key | Used for | Placeholders |
+|-----|----------|--------------|
+| `system` | Plans titles, thumbnail concept, hooks, outline with open loops, takeaway | `$brand`, `$host1`, `$host2`, `$language`, `$tone`, `$minutes`, `$target_words`, `$style_dna` |
+| `user` | The topic ask | `$topic` |
+
+### `script.yaml` — stage 2: the Scriptwriter (follows the blueprint)
 | Key | Used for | Placeholders |
 |-----|----------|--------------|
 | `system` | The rules & style for writing the script | `$brand`, `$host1`, `$host2`, `$language`, `$tone`, `$target_words`, `$floor` |

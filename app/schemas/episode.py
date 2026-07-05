@@ -22,6 +22,14 @@ class EpisodeRead(BaseModel):
     hosts: list[str]
     target_minutes: float
     status: EpisodeStatus
+    error: str | None = None
+    # Progress flags — what artifacts exist (drives step unlocking in the UI).
+    has_blueprint: bool = False
+    has_script: bool = False
+    has_audio: bool = False
+    has_image: bool = False
+    has_video: bool = False
+    has_metadata: bool = False
     youtube_video_id: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -34,6 +42,13 @@ class EpisodeRead(BaseModel):
             hosts=doc.hosts,
             target_minutes=doc.target_minutes,
             status=doc.status,
+            error=doc.error,
+            has_blueprint=doc.blueprint is not None,
+            has_script=bool(doc.script),
+            has_audio=bool(doc.audio_path),
+            has_image=bool(doc.image_path),
+            has_video=bool(doc.video_path),
+            has_metadata=bool(doc.metadata.title),
             youtube_video_id=doc.youtube_video_id,
             created_at=doc.created_at,
             updated_at=doc.updated_at,

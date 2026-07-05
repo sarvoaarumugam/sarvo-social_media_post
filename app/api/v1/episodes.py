@@ -17,10 +17,18 @@ from app.exceptions.handlers import AppError
 from app.models.episode import Episode, EpisodeStatus
 from app.schemas.audio import AudioRead
 from app.schemas.episode import EpisodeCreate, EpisodeRead
-from app.schemas.media import ImageRead, ImageRegenerateRequest, VideoRead
-from app.schemas.script import ScriptGenerateRequest, ScriptRead, ScriptUpdate
-from app.services.image.service import run_image_regeneration, run_image_stage
+from app.schemas.media import ImagePresetRequest, ImageRead, ImageRegenerateRequest, VideoRead
+from app.schemas.metadata import MetadataRead, MetadataUpdate, UploadRead
+from app.schemas.script import BlueprintRead, ScriptGenerateRequest, ScriptRead, ScriptUpdate
+from app.services.image.service import (
+    run_image_preset_stage,
+    run_image_regeneration,
+    run_image_stage,
+)
+from app.services.metadata_generator import run_metadata_stage
 from app.services.script_generator import count_words, run_scripting_stage
+from app.services.strategy_generator import run_blueprint_stage
+from app.services.youtube_uploader import run_upload_stage
 from app.services.tts.service import run_audio_stage, voice_map
 from app.services.video_assembler import run_video_stage
 
@@ -72,6 +80,32 @@ async def list_episodes():
 @router.get("/{episode_id}", response_model=EpisodeRead)
 async def get_episode(episode_id: PydanticObjectId):
     return EpisodeRead.from_doc(await _get_or_404(episode_id))
+
+
+# --- Blueprint stage (strategist pass) — review the PLAN before the script ---
+
+
+def _to_blueprint_read(episode: Episode) -> BlueprintRead:
+    return BlueprintRead(
+        episode_id=str(episode.id),
+        status=episode.status,
+        topic=episode.topic,
+        blueprint=episode.blueprint,
+        cost_usd=episode.cost_log.script,
+    )
+
+
+@router.post("/{episode_id}/blueprint", response_model=BlueprintRead)
+async def generate_episode_blueprint(episode_id: PydanticObjectId):
+    """Generate (or regenerate) the strategist blueprint: titles, hooks, outline,
+    open loops, takeaway. Review this BEFORE generating the script."""
+    episode = await _get_or_404(episode_id)
+    return _to_blueprint_read(await run_blueprint_stage(episode))
+
+
+@router.get("/{episode_id}/blueprint", response_model=BlueprintRead)
+async def get_episode_blueprint(episode_id: PydanticObjectId):
+    return _to_blueprint_read(await _get_or_404(episode_id))
 
 
 # --- Scripting stage (M1) — the human review checkpoint ---
@@ -166,6 +200,7 @@ def _to_image_read(episode: Episode) -> ImageRead:
         episode_id=str(episode.id),
         status=episode.status,
         image_path=episode.image_path,
+        thumbnail_path=episode.thumbnail_path,
         image_prompt=episode.image_prompt,
         cost_usd=episode.cost_log.image,
     )
@@ -178,6 +213,16 @@ async def generate_episode_image(episode_id: PydanticObjectId):
     if not episode.audio_path:
         raise AppError("Generate audio before the image.", status_code=409)
     return _to_image_read(await run_image_stage(episode))
+
+
+@router.post("/{episode_id}/image/preset", response_model=ImageRead)
+async def use_preset_thumbnail(episode_id: PydanticObjectId, payload: ImagePresetRequest):
+    """Use one of the preset designs from assets/ as this episode's thumbnail
+    (topic drawn top-center). Zero AI cost."""
+    episode = await _get_or_404(episode_id)
+    if not episode.audio_path:
+        raise AppError("Generate audio before the image.", status_code=409)
+    return _to_image_read(await run_image_preset_stage(episode, payload.name))
 
 
 @router.post("/{episode_id}/image/regenerate", response_model=ImageRead)
@@ -196,10 +241,20 @@ async def get_episode_image(episode_id: PydanticObjectId):
 
 @router.get("/{episode_id}/image/file")
 async def download_episode_image(episode_id: PydanticObjectId):
+    """The clean background used inside the video."""
     episode = await _get_or_404(episode_id)
     if not episode.image_path or not Path(episode.image_path).exists():
         raise AppError("Image not generated yet.", status_code=404)
     return FileResponse(episode.image_path, media_type="image/png")
+
+
+@router.get("/{episode_id}/thumbnail/file")
+async def download_episode_thumbnail(episode_id: PydanticObjectId):
+    """The title-overlay variant that becomes the YouTube thumbnail."""
+    episode = await _get_or_404(episode_id)
+    if not episode.thumbnail_path or not Path(episode.thumbnail_path).exists():
+        raise AppError("Thumbnail not generated yet.", status_code=404)
+    return FileResponse(episode.thumbnail_path, media_type="image/png")
 
 
 # --- Video stage (M3) — the watch-and-approve checkpoint ---
@@ -244,3 +299,78 @@ async def download_episode_video(episode_id: PydanticObjectId):
         media_type="video/mp4",
         filename=f"episode-{episode_id}.mp4",
     )
+
+
+# --- Metadata stage (M4) — packaging: title / description / chapters / tags ---
+
+
+def _to_metadata_read(episode: Episode) -> MetadataRead:
+    return MetadataRead(
+        episode_id=str(episode.id),
+        status=episode.status,
+        title=episode.metadata.title,
+        description=episode.metadata.description,
+        tags=episode.metadata.tags,
+        chapters=episode.metadata.chapters,
+        cost_usd=episode.cost_log.metadata,
+    )
+
+
+@router.post("/{episode_id}/metadata", response_model=MetadataRead)
+async def generate_episode_metadata(episode_id: PydanticObjectId):
+    """Generate the packaging (title, SEO description with chapters, tags)."""
+    episode = await _get_or_404(episode_id)
+    if not episode.script:
+        raise AppError("Generate a script before metadata.", status_code=409)
+    return _to_metadata_read(await run_metadata_stage(episode))
+
+
+@router.get("/{episode_id}/metadata", response_model=MetadataRead)
+async def get_episode_metadata(episode_id: PydanticObjectId):
+    return _to_metadata_read(await _get_or_404(episode_id))
+
+
+@router.put("/{episode_id}/metadata", response_model=MetadataRead)
+async def update_episode_metadata(episode_id: PydanticObjectId, payload: MetadataUpdate):
+    """Apply your corrections — only the fields you send are replaced."""
+    episode = await _get_or_404(episode_id)
+    if payload.title is not None:
+        episode.metadata.title = payload.title.strip()[:100]
+    if payload.description is not None:
+        episode.metadata.description = payload.description[:4900]
+    if payload.tags is not None:
+        episode.metadata.tags = [t.strip().lower() for t in payload.tags if t.strip()][:20]
+    episode.updated_at = datetime.now(timezone.utc)
+    await episode.save()
+    return _to_metadata_read(episode)
+
+
+# --- Upload stage (M4) — the final step: publish to YouTube (unlisted) ---
+
+
+def _to_upload_read(episode: Episode) -> UploadRead:
+    vid = episode.youtube_video_id
+    return UploadRead(
+        episode_id=str(episode.id),
+        status=episode.status,
+        youtube_video_id=vid,
+        url=f"https://youtu.be/{vid}" if vid else None,
+        privacy=episode.privacy,
+    )
+
+
+@router.post("/{episode_id}/upload", response_model=UploadRead)
+async def upload_episode_to_youtube(episode_id: PydanticObjectId):
+    """Upload the finished video to YouTube with metadata + thumbnail.
+    Privacy stays 'unlisted' until you trust the pipeline."""
+    episode = await _get_or_404(episode_id)
+    if not episode.video_path:
+        raise AppError("Assemble the video before uploading.", status_code=409)
+    if not episode.metadata.title:
+        raise AppError("Generate metadata before uploading.", status_code=409)
+    return _to_upload_read(await run_upload_stage(episode))
+
+
+@router.get("/{episode_id}/upload", response_model=UploadRead)
+async def get_episode_upload(episode_id: PydanticObjectId):
+    return _to_upload_read(await _get_or_404(episode_id))

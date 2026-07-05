@@ -35,6 +35,13 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.15.20",
 ]
+frontend = [
+    "streamlit>=1.50.0",
+    "requests>=2.32.0",
+]
+
+[tool.uv]
+default-groups = ["dev", "frontend"]
 
 [build-system]
 requires = ["hatchling"]

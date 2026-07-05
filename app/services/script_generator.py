@@ -22,8 +22,13 @@ from openai import AsyncOpenAI
 from app.core import prompts
 from app.core.config import get_settings
 from app.core.pricing import text_cost
-from app.models.episode import DialogueTurn, Episode, EpisodeStatus
+from app.models.episode import Blueprint, DialogueTurn, Episode, EpisodeStatus
 from app.schemas.script import GeneratedScript
+from app.services.strategy_generator import (
+    blueprint_to_text,
+    generate_blueprint,
+    load_style_dna,
+)
 
 logger = logging.getLogger("app.script")
 
@@ -69,6 +74,7 @@ def _build_system_prompt(
         tone=tone,
         target_words=target_words,
         floor=int(target_words * 0.9),
+        style_dna=load_style_dna(),
     )
 
 
@@ -105,14 +111,22 @@ def _build_expansion_messages(
     ]
 
 
-def _build_user_prompt(topic: str, hosts: list[str]) -> str:
-    return prompts.render("script", "user", topic=topic, host1=hosts[0], host2=hosts[1])
+def _build_user_prompt(topic: str, hosts: list[str], blueprint: Blueprint) -> str:
+    return prompts.render(
+        "script",
+        "user",
+        topic=topic,
+        host1=hosts[0],
+        host2=hosts[1],
+        blueprint=blueprint_to_text(blueprint),
+    )
 
 
 async def generate_script(
     topic: str,
     hosts: list[str],
     *,
+    blueprint: Blueprint | None = None,
     brand: str | None = None,
     language: str | None = None,
     tone: str | None = None,
@@ -120,7 +134,10 @@ async def generate_script(
     model: str | None = None,
     temperature: float | None = None,
 ) -> ScriptGenerationResult:
-    """Generate a clean two-host script for `topic`. Pure: no DB writes."""
+    """Generate a two-host script for `topic`, following the strategist's blueprint.
+    If no blueprint is passed, one is generated first (its cost is included).
+    Pure: no DB writes.
+    """
     settings = get_settings()
     brand = brand or settings.channel_brand_name
     language = language or settings.show_language
@@ -131,6 +148,14 @@ async def generate_script(
 
     if len(hosts) < 2:
         raise ValueError("Exactly two hosts are required for the conversation.")
+
+    blueprint_cost = 0.0
+    if blueprint is None:
+        bp_result = await generate_blueprint(
+            topic, hosts, minutes=target_words / settings.words_per_minute, model=model
+        )
+        blueprint = bp_result.blueprint
+        blueprint_cost = bp_result.cost_usd
 
     client = AsyncOpenAI(api_key=settings.openai_api_key)
     floor = int(target_words * 0.85)
@@ -159,7 +184,7 @@ async def generate_script(
                 "role": "system",
                 "content": _build_system_prompt(brand, hosts, language, tone, target_words),
             },
-            {"role": "user", "content": _build_user_prompt(topic, hosts)},
+            {"role": "user", "content": _build_user_prompt(topic, hosts, blueprint)},
         ]
     )
     words = count_words(turns)
@@ -176,7 +201,7 @@ async def generate_script(
             break  # no improvement; keep what we have
         turns, words = expanded, count_words(expanded)
 
-    cost = text_cost(model, in_tok, out_tok)
+    cost = round(text_cost(model, in_tok, out_tok) + blueprint_cost, 6)
     logger.info("Script done: %d turns, %d words, $%.4f", len(turns), words, cost)
     return ScriptGenerationResult(
         turns=turns,
@@ -200,10 +225,25 @@ async def run_scripting_stage(episode: Episode) -> Episode:
     await episode.save()
 
     try:
+        # Stage 1: strategist blueprint (reuse if already generated/reviewed).
+        if episode.blueprint is None:
+            bp_result = await generate_blueprint(
+                episode.topic, episode.hosts, minutes=episode.target_minutes
+            )
+            episode.blueprint = bp_result.blueprint
+            episode.cost_log.script += bp_result.cost_usd
+            await episode.save()
+
+        # Stage 2: scriptwriter follows the blueprint.
         target_words = settings.words_for_minutes(episode.target_minutes)
-        result = await generate_script(episode.topic, episode.hosts, target_words=target_words)
+        result = await generate_script(
+            episode.topic,
+            episode.hosts,
+            blueprint=episode.blueprint,
+            target_words=target_words,
+        )
         episode.script = result.turns
-        episode.cost_log.script = result.cost_usd
+        episode.cost_log.script += result.cost_usd
         episode.status = EpisodeStatus.scripted
         episode.error = None
         episode.updated_at = datetime.now(timezone.utc)

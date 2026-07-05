@@ -1,0 +1,37 @@
+# ============================================================
+#  STYLE DNA — the distilled "why top videos win" principles.
+#  Injected into BOTH the strategist and the scriptwriter.
+#
+#  To upgrade it from real reference videos you admire:
+#  drop their transcripts (.txt) into the references/ folder and run
+#      uv run python scripts/analyze_references.py
+#  It will rewrite the `dna` block below from those transcripts.
+# ============================================================
+
+dna: |
+  RETENTION DNA (non-negotiable principles from top-performing videos):
+
+  1. COLD OPEN — the first line IS the hook. Never open with greetings, names,
+     "welcome back", channel talk, or throat-clearing. Drop the listener straight
+     into tension: a bold claim, a shocking number, a question they can't ignore,
+     or the middle of a story.
+  2. CURIOSITY GAP — within the first 15 seconds, promise a specific payoff the
+     listener will get by staying, and make them feel the gap between what they
+     know and what they're about to learn.
+  3. OPEN LOOPS — never resolve everything at once. Before closing one idea,
+     tease the next ("and the second one is the one nobody talks about...").
+     Keep one big loop open from the hook that only closes near the end.
+  4. PATTERN INTERRUPTS — every 60-90 seconds something must CHANGE: a mini
+     story, a surprising stat, a disagreement between hosts, a role-play moment,
+     a direct question to the listener. Predictability kills retention.
+  5. CONCRETE > ABSTRACT — every point earns its place with a vivid example,
+     a tiny personal story, a number, or a scenario the listener recognizes from
+     their own life. No generic advice without a picture attached.
+  6. EMOTIONAL BEATS — alternate: curiosity -> surprise -> relatability ->
+     small laugh -> "aha" -> warmth. A flat emotional line = a dead video.
+  7. STAKES — remind the listener why this matters to THEM (time, money,
+     regret, missed opportunity). Personal stakes hold attention.
+  8. ONE THING — one clear takeaway, said memorably once near the end. Videos
+     that try to teach ten things teach nothing.
+  9. SATISFYING CLOSE — close the big loop, deliver the payoff promised in the
+     hook, then ONE soft CTA. End strong; never fade out with filler.

@@ -67,8 +67,15 @@ class Settings(BaseSettings):
     image_provider: str = "openai"  # "openai" (AI) | "pillow" (free solid card)
     openai_image_model: str = "gpt-image-1"  # best; auto-falls back to dall-e-3
     image_quality: str = "medium"  # gpt-image-1: low|medium|high|auto
-    image_style: str = "modern, cinematic, vibrant digital art with a clean premium feel"
-    image_overlay_text: bool = True  # overlay crisp brand+title on the AI image
+    image_style: str = (
+        "clean flat vector illustration, modern editorial style, bold shapes, "
+        "warm friendly colors on the characters, premium and minimal"
+    )
+    image_overlay_text: bool = True  # overlay crisp brand+title on the thumbnail variant
+    # Fixed background: if this file exists, EVERY video uses it as the talking-scene
+    # background (no AI cost). Replace the file to change the look; delete it to go
+    # back to AI-generated backgrounds. Recommended: 1920x1080 PNG.
+    background_image_file: str = "assets/background.png"
 
     image_width: int = 1920
     image_height: int = 1080
@@ -81,10 +88,45 @@ class Settings(BaseSettings):
     image_font_bold: str = "C:/Windows/Fonts/arialbd.ttf"
     image_font_regular: str = "C:/Windows/Fonts/arial.ttf"
 
-    # --- Video assembly (M3) — ffmpeg static image + audio -> mp4. ---
+    # --- Video assembly (M3) — ffmpeg image + audio (+captions +waveform) -> mp4. ---
     video_fps: int = 24
     video_crf: int = 20  # quality (lower = better/larger)
     video_audio_bitrate: str = "192k"
+
+    # Intro card: show the topic thumbnail SILENTLY at the start, then the talking
+    # scene begins and audio/captions/waveform all start together. 0 disables.
+    video_intro_seconds: float = 2.0
+
+    # Thumbnail title overlay (topic text in the empty TOP-CENTER of the design).
+    thumbnail_title_font: str = "C:/Windows/Fonts/impact.ttf"  # classic thumbnail font
+    thumbnail_title_font_size: int = 150  # customizable; auto-shrinks if too long
+    thumbnail_title_uppercase: bool = True  # DREAMS & GOALS style
+    thumbnail_title_shorten: bool = True  # drop '| Learn English Fast'-style tails
+    thumbnail_title_width_ratio: float = 0.52  # text stays in the center column
+    thumbnail_title_margin_top: int = 56  # px from the top edge
+    # Colors auto-switch with the artwork's brightness; accent = the pop line.
+    thumbnail_text_on_light: str = "#1E293B"  # dark slate on bright art
+    thumbnail_accent_on_light: str = "#DC2626"  # strong red
+    thumbnail_text_on_dark: str = "#FFFFFF"
+    thumbnail_accent_on_dark: str = "#FBBF24"  # warm amber
+    # Brand mark drawn on the background's TOP-LEFT corner.
+    background_brand_text: str = "SARVO"
+
+    # Animated audio waveform (bottom center, like pro podcast channels).
+    video_waveform: bool = True
+    waveform_width: int = 840
+    waveform_height: int = 130
+    waveform_margin_bottom: int = 140  # px from the bottom edge
+    waveform_color: str = "white"
+
+    # Burned-in live captions (what the hosts are saying, phrase by phrase).
+    video_captions: bool = True
+    caption_font: str = "Arial"
+    caption_font_size: int = 62
+    caption_margin_top: int = 200  # px from the top edge (kept clear in the AI image)
+    caption_host1_color: str = "&H00FFFFFF"  # ASS &HAABBGGRR — white
+    caption_host2_color: str = "&H00BFD42D"  # teal (#2DD4BF)
+    caption_max_words: int = 5  # words shown per caption chunk
 
     # --- MongoDB Atlas ---
     mongodb_uri: str
@@ -98,6 +140,8 @@ class Settings(BaseSettings):
     # --- YouTube OAuth (desktop app) ---
     youtube_client_secret_file: str = "client_secret.json"
     youtube_token_file: str = "token.json"
+    youtube_category_id: str = "27"  # 27 = Education (fits ESL); swappable per niche
+    youtube_made_for_kids: bool = False
 
 
 @lru_cache

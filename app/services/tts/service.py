@@ -22,7 +22,7 @@ from pydub.effects import normalize as _peak_normalize
 from app.core import media, prompts
 from app.core.config import get_settings
 from app.core.pricing import tts_cost
-from app.models.episode import DialogueTurn, Episode, EpisodeStatus
+from app.models.episode import DialogueTurn, Episode, EpisodeStatus, TurnTiming
 from app.services.tts import get_tts_provider
 from app.services.tts.base import TTSProvider
 
@@ -35,6 +35,7 @@ class AudioResult:
     duration_seconds: float
     cost_usd: float
     voices: dict[str, str]
+    turn_timings: list[TurnTiming]
 
 
 def voice_map(hosts: list[str]) -> dict[str, str]:
@@ -101,9 +102,11 @@ async def synthesize_script(
     rendered.sort(key=lambda pair: pair[0])
 
     # Stitch with natural gaps: a small gap mid-speaker, a slightly longer one when
-    # the conversation hands over to the other host.
+    # the conversation hands over to the other host. Record each turn's exact
+    # start/end so captions can be burned in perfectly synced.
     final = AudioSegment.empty()
     prev_speaker: str | None = None
+    timings: list[TurnTiming] = []
     for (idx, segment), turn in zip(rendered, turns):
         if prev_speaker is not None:
             gap = (
@@ -112,7 +115,10 @@ async def synthesize_script(
                 else settings.tts_pause_turn_ms
             )
             final += AudioSegment.silent(duration=gap)
+        start = len(final) / 1000.0
         final += segment
+        timings.append(TurnTiming(index=idx, start=round(start, 3),
+                                  end=round(len(final) / 1000.0, 3)))
         prev_speaker = turn.speaker
 
     final = _normalize_loudness(final, settings.tts_target_dbfs)
@@ -128,6 +134,7 @@ async def synthesize_script(
         duration_seconds=round(duration, 2),
         cost_usd=cost,
         voices=voices,
+        turn_timings=timings,
     )
 
 
@@ -151,6 +158,7 @@ async def run_audio_stage(episode: Episode) -> Episode:
 
         episode.audio_path = str(out_path)
         episode.audio_duration_seconds = result.duration_seconds
+        episode.turn_timings = result.turn_timings
         episode.cost_log.tts = result.cost_usd
         episode.status = EpisodeStatus.audio_done
         episode.error = None

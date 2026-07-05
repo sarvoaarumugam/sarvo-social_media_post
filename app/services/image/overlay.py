@@ -53,6 +53,126 @@ def _cover(img: Image.Image, w: int, h: int) -> Image.Image:
     return img.crop((left, top, left + w, top + h))
 
 
+def compose_background(base_png: bytes | None, brand: str) -> bytes:
+    """The in-video background: art cover-fitted, with a small brand mark in the
+    TOP-LEFT corner (center stays clear for captions, bottom for the waveform)."""
+    s = get_settings()
+    w, h = s.image_width, s.image_height
+    if base_png is not None:
+        canvas = _cover(Image.open(BytesIO(base_png)).convert("RGB"), w, h)
+    else:
+        canvas = Image.new("RGB", (w, h), s.image_bg_color)
+
+    if brand:  # empty brand = use the art exactly as-is
+        draw = ImageDraw.Draw(canvas)
+        font = _load_font(44, bold=True)
+        text = brand.upper()
+        x, y = int(w * 0.03), int(h * 0.04)
+        draw.text((x + 2, y + 2), text, font=font, fill="#000000")
+        draw.text((x, y), text, font=font, fill=s.image_accent_color)
+
+    buf = BytesIO()
+    canvas.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _load_title_font(size: int) -> ImageFont.FreeTypeFont:
+    s = get_settings()
+    for path in (s.thumbnail_title_font, "C:/Windows/Fonts/ariblk.ttf", s.image_font_bold):
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default(size)
+
+
+def _clean_title(title: str) -> str:
+    """Keep only the punchy core: drop '| Learn English Fast'-style SEO tails."""
+    core = title.split("|")[0].strip()
+    if len(core) > 48 and "—" in core:
+        core = core.split("—")[0].strip()
+    return core or title
+
+
+def _region_is_light(img: Image.Image, x0: int, y0: int, x1: int, y1: int) -> bool:
+    """Average brightness of the area the text will occupy (0-255 scale)."""
+    region = img.crop((x0, y0, x1, y1)).convert("L").resize((32, 32))
+    hist_mean = sum(i * c for i, c in enumerate(region.histogram())) / (32 * 32)
+    return hist_mean > 140
+
+
+def compose_thumbnail_card(base_png: bytes, title: str) -> bytes:
+    """The thumbnail / intro card, done like top channels do it:
+
+    - shortened, UPPERCASE title in a bold display font (Impact)
+    - fitted to the EMPTY CENTER COLUMN so it never overlaps the hosts
+    - text color auto-switches with the artwork brightness (dark-on-light /
+      white-on-dark), one line popped in the accent color
+    - soft drop shadow instead of a hard outline
+    """
+    s = get_settings()
+    w, h = s.image_width, s.image_height
+    canvas = _cover(Image.open(BytesIO(base_png)).convert("RGB"), w, h)
+    draw = ImageDraw.Draw(canvas)
+
+    text = _clean_title(title) if s.thumbnail_title_shorten else title
+    if s.thumbnail_title_uppercase:
+        text = text.upper()
+
+    # Fit into the center column, at most 3 lines, block no deeper than ~42% height.
+    max_text_w = int(w * s.thumbnail_title_width_ratio)
+    size = s.thumbnail_title_font_size
+    while size >= 40:
+        font = _load_title_font(size)
+        lines = _wrap(draw, text, font, max_text_w)
+        line_h = int(size * 1.12)
+        if len(lines) <= 3 and line_h * len(lines) <= int(h * 0.42):
+            break
+        size = int(size * 0.85)
+
+    block_h = line_h * len(lines)
+    y0 = s.thumbnail_title_margin_top
+
+    # Pick colors from the brightness of the exact area the text sits on.
+    light = _region_is_light(canvas, (w - max_text_w) // 2, y0,
+                             (w + max_text_w) // 2, y0 + block_h)
+    primary = s.thumbnail_text_on_light if light else s.thumbnail_text_on_dark
+    accent = s.thumbnail_accent_on_light if light else s.thumbnail_accent_on_dark
+    shadow = "#00000055" if light else "#00000099"
+
+    # Which line pops in the accent color: the middle of 3, the 2nd of 2.
+    accent_line = {3: 1, 2: 1}.get(len(lines), -1)
+
+    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    y = y0
+    off = max(3, size // 28)  # shadow offset scales with font size
+    for i, line in enumerate(lines):
+        lw = odraw.textlength(line, font=font)
+        x = (w - lw) // 2
+        color = accent if i == accent_line else primary
+        odraw.text((x + off, y + off), line, font=font, fill=shadow)
+        odraw.text((x, y), line, font=font, fill=color)
+        y += line_h
+
+    # Single-line titles: pop the longest word instead of a whole line.
+    if len(lines) == 1:
+        words = lines[0].split()
+        if len(words) > 2:
+            target = max(words, key=len)
+            x = (w - odraw.textlength(lines[0], font=font)) // 2
+            for word in words:
+                word_w = odraw.textlength(word + " ", font=font)
+                if word == target:
+                    odraw.text((x, y0), word, font=font, fill=accent)
+                x += word_w
+
+    canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
+    buf = BytesIO()
+    canvas.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def compose(
     base_png: bytes | None,
     title: str,

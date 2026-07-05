@@ -1,24 +1,52 @@
 # ============================================================
 #  IMAGE PROMPTS  (the "cover art" stage — sent to gpt-image-1)
-#  The AI makes the BACKGROUND only; the app overlays the title text
-#  afterwards, so we tell the model: absolutely no text in the image.
+#  Style: illustrated two-host podcast studio scene. The center and
+#  upper-middle stay EMPTY because live captions are burned there,
+#  and the bottom-center stays clear for the animated waveform.
+#  The app overlays title text on the thumbnail variant afterwards.
 # ============================================================
 
 # First-time generation from the topic.
 # Placeholders: $topic $brand $style
 generation: |
-  Create a striking, high-quality 16:9 cover background image for a podcast episode about: "$topic".
-  Visual style: $style.
-  Composition: cinematic and clean, with a single clear focal subject that visually represents the topic, and calm, uncluttered negative space toward the center and lower third so a title can be overlaid later.
-  Lighting: rich, dramatic and professional. Color palette: cohesive and bold, matching the mood of the topic.
-  Make it look like a premium, scroll-stopping YouTube thumbnail — modern, crisp, high detail.
-  Absolutely NO text, NO letters, NO numbers, NO words, NO logos, and NO watermarks anywhere in the image.
+  Create a 16:9 illustration for a two-host podcast video. The episode topic is: "$topic".
+
+  SCENE (must follow exactly):
+  - On the LEFT edge: a friendly young woman sitting at a professional studio microphone,
+    wearing large headphones, mid-conversation, gesturing naturally with one hand, warm
+    smile. She wears a colored top (e.g. teal or green).
+  - On the RIGHT edge: a relaxed young man sitting at a professional studio microphone,
+    wearing headphones, smiling and listening or replying. He wears a contrasting colored
+    t-shirt (e.g. yellow or orange).
+  - They face each other from opposite sides of the frame, like a real podcast studio.
+  - Characters occupy only the left and right thirds; keep them in the lower two-thirds
+    of the frame.
+
+  BACKGROUND: a very dark, nearly-flat navy/charcoal studio backdrop with subtle depth.
+  CRITICAL: the ENTIRE center of the image — especially the upper-middle and the
+  bottom-center strip — must be plain empty dark background. No objects, no patterns,
+  no light rays there: captions and an audio waveform will be overlaid in those areas.
+
+  STYLE: $style. Subtle mood accents may reflect the topic (color temperature, tiny
+  props near the hosts), but keep it clean and minimal.
+
+  Absolutely NO text, NO letters, NO numbers, NO words, NO logos, and NO watermarks
+  anywhere in the image.
 
 # Re-generation when the user wants changes. Their request is in $feedback.
 # Placeholders: $topic $brand $style $feedback
 regeneration: |
-  Create a NEW version of a striking 16:9 cover background image for a podcast episode about: "$topic".
-  Visual style: $style.
+  Create a NEW version of a 16:9 two-host podcast studio illustration for the episode
+  topic: "$topic".
+
+  Keep the layout law: woman with headphones at a mic on the LEFT, man with headphones
+  at a mic on the RIGHT, facing each other; characters only in the left/right thirds and
+  lower two-thirds; very dark flat studio background; the entire center, upper-middle and
+  bottom-center strip must stay plain empty dark background (captions and a waveform get
+  overlaid there).
+
   Apply these specific changes the user asked for: $feedback
-  Keep it cinematic, premium and clean, with calm negative space toward the center and lower third for a title overlay.
-  Absolutely NO text, NO letters, NO numbers, NO words, NO logos, and NO watermarks anywhere in the image.
+
+  STYLE: $style.
+  Absolutely NO text, NO letters, NO numbers, NO words, NO logos, and NO watermarks
+  anywhere in the image.

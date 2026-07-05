@@ -14,6 +14,7 @@ import asyncio
 
 from app.core.config import get_settings
 from app.services.script_generator import generate_script
+from app.services.strategy_generator import blueprint_to_text, generate_blueprint
 
 DEFAULT_TOPIC = (
     "Don't Waste Your Life | English Podcast for Easy Conversation in Daily Life | "
@@ -45,9 +46,18 @@ async def main() -> None:
     print(f"\nTopic : {args.topic}")
     print(f"Hosts : {hosts[0]} & {hosts[1]}")
     print(f"Length: ~{args.minutes} min  (~{target_words} words)")
-    print("Generating... (calling OpenAI)\n" + "-" * 70)
 
-    result = await generate_script(args.topic, hosts, target_words=target_words)
+    print("\n[1/2] STRATEGIST — building the blueprint...\n" + "=" * 70)
+    bp_result = await generate_blueprint(args.topic, hosts, minutes=args.minutes)
+    print(blueprint_to_text(bp_result.blueprint))
+    print("=" * 70)
+    print(f"Titles offered : {len(bp_result.blueprint.titles)} | cost ${bp_result.cost_usd:.4f}")
+
+    print("\n[2/2] SCRIPTWRITER — writing the episode from the blueprint...")
+    print("-" * 70)
+    result = await generate_script(
+        args.topic, hosts, blueprint=bp_result.blueprint, target_words=target_words
+    )
 
     for turn in result.turns:
         print(f"\n{turn.speaker}: {turn.text}")
