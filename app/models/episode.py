@@ -81,10 +81,18 @@ class CostLog(BaseModel):
     metadata: float = 0.0
 
 
+def _default_hosts() -> list[str]:
+    # Single source of truth: settings.default_hosts (change hosts in .env/config).
+    from app.core.config import get_settings
+
+    return list(get_settings().default_hosts)
+
+
 class Episode(Document):
     topic: str
-    hosts: list[str] = Field(default_factory=lambda: ["Anna", "Jake"])
+    hosts: list[str] = Field(default_factory=_default_hosts)
     target_minutes: float = 10.0  # desired episode length; drives script word count
+    user_context: str | None = None  # creator's own knowledge/notes to ground the content
 
     status: EpisodeStatus = EpisodeStatus.queued
     retry_count: int = 0

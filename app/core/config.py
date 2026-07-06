@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # --- OpenAI ---
     openai_api_key: str
-    openai_script_model: str = "gpt-4o"
+    openai_script_model: str = "gpt-5.5"
     openai_tts_model: str = "gpt-4o-mini-tts"  # most steerable TTS via `instructions`
     tts_voice_host1: str = "coral"  # warm, expressive female (host 1 / Anna)
     tts_voice_host2: str = "ash"  # expressive, easygoing male (host 2 / Jake)
@@ -134,7 +134,7 @@ class Settings(BaseSettings):
 
     # --- Brand / niche (swappable config, never hardcoded in logic) ---
     channel_brand_name: str = "Sarvo Podcast"
-    default_hosts: list[str] = ["Anna", "Jake"]
+    default_hosts: list[str] = ["Jd", "Sarvo"]
     default_privacy: str = "unlisted"  # keep unlisted until pipeline is trusted
 
     # --- YouTube OAuth (desktop app) ---

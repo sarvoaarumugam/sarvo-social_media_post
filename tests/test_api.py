@@ -36,10 +36,15 @@ async def test_health(client):
 async def test_episode_create_list_get(client):
     prefix = get_settings().api_v1_prefix
 
-    created = await client.post(f"{prefix}/episodes", json={"topic": "pytest topic"})
+    created = await client.post(
+        f"{prefix}/episodes",
+        json={"topic": "pytest topic", "duration_minutes": 3, "context": "my notes"},
+    )
     assert created.status_code == 201
     ep = created.json()
     assert ep["status"] == "queued"
+    assert ep["target_minutes"] == 3
+    assert ep["user_context"] == "my notes"
     episode_id = ep["id"]
 
     fetched = await client.get(f"{prefix}/episodes/{episode_id}")

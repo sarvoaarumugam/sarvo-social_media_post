@@ -47,11 +47,11 @@ system: |
     told with detail, a scenario acted out between the hosts, a number made vivid.
 
 # The actual ask sent with the topic + the strategist's blueprint.
-# Placeholders: $topic $host1 $host2 $blueprint
+# Placeholders: $topic $host1 $host2 $blueprint $context
 user: |
   Topic: $topic
   Hosts: $host1 and $host2
-
+  $context
   EPISODE BLUEPRINT (follow it):
   $blueprint
 

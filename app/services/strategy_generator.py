@@ -34,11 +34,25 @@ def load_style_dna() -> str:
     return prompts.render("style_dna", "dna")
 
 
+def context_block(user_context: str | None) -> str:
+    """Format the creator's own knowledge/notes for injection into prompts.
+    Empty string when none was provided (the prompt reads naturally either way)."""
+    if not user_context or not user_context.strip():
+        return ""
+    return (
+        "\nCREATOR'S OWN KNOWLEDGE (important — treat this as the primary source of "
+        "truth for the episode; ground facts, examples and explanations in it, and "
+        "only supplement with general knowledge where it has gaps):\n"
+        f"{user_context.strip()}\n"
+    )
+
+
 async def generate_blueprint(
     topic: str,
     hosts: list[str],
     *,
     minutes: float,
+    context: str | None = None,
     model: str | None = None,
 ) -> BlueprintResult:
     """Produce the episode blueprint. Pure: no DB writes."""
@@ -68,7 +82,12 @@ async def generate_blueprint(
                     style_dna=load_style_dna(),
                 ),
             },
-            {"role": "user", "content": prompts.render("strategy", "user", topic=topic)},
+            {
+                "role": "user",
+                "content": prompts.render(
+                    "strategy", "user", topic=topic, context=context_block(context)
+                ),
+            },
         ],
         response_format=Blueprint,
     )
@@ -114,7 +133,10 @@ async def run_blueprint_stage(episode: Episode) -> Episode:
     """Generate (or regenerate) the blueprint for an episode and persist it."""
     try:
         result = await generate_blueprint(
-            episode.topic, episode.hosts, minutes=episode.target_minutes
+            episode.topic,
+            episode.hosts,
+            minutes=episode.target_minutes,
+            context=episode.user_context,
         )
         episode.blueprint = result.blueprint
         episode.cost_log.script += result.cost_usd

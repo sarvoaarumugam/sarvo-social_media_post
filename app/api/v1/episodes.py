@@ -65,6 +65,7 @@ async def create_episode(payload: EpisodeCreate):
         topic=payload.topic,
         hosts=payload.hosts or settings.default_hosts,
         target_minutes=payload.duration_minutes or settings.default_duration_minutes,
+        user_context=(payload.context or "").strip() or None,
         privacy=settings.default_privacy,
     )
     await episode.insert()

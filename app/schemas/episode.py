@@ -14,6 +14,9 @@ class EpisodeCreate(BaseModel):
     hosts: list[str] | None = None
     # Desired video length in minutes (1-30). Omit to use the configured default.
     duration_minutes: float | None = Field(default=None, ge=1, le=30)
+    # Optional: your own knowledge/notes about the topic — the AI grounds the
+    # episode in this instead of relying only on its general knowledge.
+    context: str | None = Field(default=None, max_length=20000)
 
 
 class EpisodeRead(BaseModel):
@@ -21,6 +24,7 @@ class EpisodeRead(BaseModel):
     topic: str
     hosts: list[str]
     target_minutes: float
+    user_context: str | None = None
     status: EpisodeStatus
     error: str | None = None
     # Progress flags — what artifacts exist (drives step unlocking in the UI).
@@ -41,6 +45,7 @@ class EpisodeRead(BaseModel):
             topic=doc.topic,
             hosts=doc.hosts,
             target_minutes=doc.target_minutes,
+            user_context=doc.user_context,
             status=doc.status,
             error=doc.error,
             has_blueprint=doc.blueprint is not None,

@@ -26,6 +26,7 @@ from app.models.episode import Blueprint, DialogueTurn, Episode, EpisodeStatus
 from app.schemas.script import GeneratedScript
 from app.services.strategy_generator import (
     blueprint_to_text,
+    context_block,
     generate_blueprint,
     load_style_dna,
 )
@@ -111,7 +112,9 @@ def _build_expansion_messages(
     ]
 
 
-def _build_user_prompt(topic: str, hosts: list[str], blueprint: Blueprint) -> str:
+def _build_user_prompt(
+    topic: str, hosts: list[str], blueprint: Blueprint, context: str | None = None
+) -> str:
     return prompts.render(
         "script",
         "user",
@@ -119,6 +122,7 @@ def _build_user_prompt(topic: str, hosts: list[str], blueprint: Blueprint) -> st
         host1=hosts[0],
         host2=hosts[1],
         blueprint=blueprint_to_text(blueprint),
+        context=context_block(context),
     )
 
 
@@ -127,6 +131,7 @@ async def generate_script(
     hosts: list[str],
     *,
     blueprint: Blueprint | None = None,
+    context: str | None = None,
     brand: str | None = None,
     language: str | None = None,
     tone: str | None = None,
@@ -152,7 +157,11 @@ async def generate_script(
     blueprint_cost = 0.0
     if blueprint is None:
         bp_result = await generate_blueprint(
-            topic, hosts, minutes=target_words / settings.words_per_minute, model=model
+            topic,
+            hosts,
+            minutes=target_words / settings.words_per_minute,
+            context=context,
+            model=model,
         )
         blueprint = bp_result.blueprint
         blueprint_cost = bp_result.cost_usd
@@ -184,7 +193,7 @@ async def generate_script(
                 "role": "system",
                 "content": _build_system_prompt(brand, hosts, language, tone, target_words),
             },
-            {"role": "user", "content": _build_user_prompt(topic, hosts, blueprint)},
+            {"role": "user", "content": _build_user_prompt(topic, hosts, blueprint, context)},
         ]
     )
     words = count_words(turns)
@@ -228,7 +237,10 @@ async def run_scripting_stage(episode: Episode) -> Episode:
         # Stage 1: strategist blueprint (reuse if already generated/reviewed).
         if episode.blueprint is None:
             bp_result = await generate_blueprint(
-                episode.topic, episode.hosts, minutes=episode.target_minutes
+                episode.topic,
+                episode.hosts,
+                minutes=episode.target_minutes,
+                context=episode.user_context,
             )
             episode.blueprint = bp_result.blueprint
             episode.cost_log.script += bp_result.cost_usd
@@ -240,6 +252,7 @@ async def run_scripting_stage(episode: Episode) -> Episode:
             episode.topic,
             episode.hosts,
             blueprint=episode.blueprint,
+            context=episode.user_context,
             target_words=target_words,
         )
         episode.script = result.turns

@@ -1,7 +1,10 @@
 """Sarvo Podcast Studio — Streamlit frontend for the pipeline.
 
-A guided, step-locked wizard over the FastAPI backend: each stage unlocks only
-when the previous one is done, so the flow can't be run out of order.
+Layout (dashboard-first, like a SaaS app):
+  HOME    → big "Create New Video" button + a card gallery of every episode
+            (each shows its thumbnail, stage and progress; click to resume).
+  CREATE  → the topic form.
+  EPISODE → the guided, step-locked wizard (Plan → … → Upload).
 
 Run the backend first:   uv run uvicorn main:app --reload
 Then this UI:            uv run streamlit run frontend/app.py
@@ -17,31 +20,39 @@ st.set_page_config(page_title="Sarvo Podcast Studio", page_icon="🎙️", layou
 
 st.markdown("""
 <style>
-    /* cleaner overall look */
     #MainMenu, footer, header {visibility: hidden;}
-    .block-container {padding-top: 1.2rem; max-width: 1150px;}
+    .block-container {padding-top: 1.0rem; max-width: 1200px;}
 
-    /* status pill */
-    .pill {display:inline-block; padding: 3px 14px; border-radius: 999px;
-           font-size: 0.85rem; font-weight: 600; letter-spacing: .2px;}
+    .topbar {display:flex; justify-content:space-between; align-items:center;
+             padding: 4px 0 14px 0; border-bottom: 1px solid #E2E8F0; margin-bottom: 18px;}
+    .brand {font-size: 1.5rem; font-weight: 800; color:#0F172A;}
+    .backend {font-size:0.85rem; color:#64748B;}
+
+    .pill {display:inline-block; padding: 2px 12px; border-radius: 999px;
+           font-size: 0.78rem; font-weight: 600;}
     .pill-ok   {background:#DCFCE7; color:#166534;}
     .pill-run  {background:#FEF9C3; color:#854D0E;}
     .pill-fail {background:#FEE2E2; color:#991B1B;}
     .pill-idle {background:#E2E8F0; color:#334155;}
 
-    /* meta chips under the title */
     .chip {display:inline-block; background:#F1F5F9; color:#334155;
            padding:3px 12px; border-radius:8px; margin-right:8px; font-size:0.85rem;}
 
-    /* step progress row */
     .steps {display:flex; gap:6px; margin: 10px 0 4px 0; flex-wrap:wrap;}
     .step {padding:5px 12px; border-radius:8px; font-size:0.82rem; font-weight:600;}
     .step-done {background:#DCFCE7; color:#166534;}
     .step-next {background:#DBEAFE; color:#1E40AF; outline:2px solid #93C5FD;}
     .step-lock {background:#F1F5F9; color:#94A3B8;}
 
-    div.stButton > button[kind="primary"] {border-radius:10px; font-weight:600;}
+    .card-title {font-weight:700; font-size:0.92rem; color:#0F172A;
+                 line-height:1.25; height: 2.5em; overflow:hidden; margin: 6px 0 4px 0;}
+    .card-ph {width:100%; aspect-ratio:16/9; border-radius:10px;
+              background:linear-gradient(135deg,#0F766E,#14B8A6);
+              display:flex; align-items:center; justify-content:center;
+              color:white; font-size:2.2rem;}
+
     div.stButton > button {border-radius:10px;}
+    div.stButton > button[kind="primary"] {font-weight:700;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,11 +75,6 @@ STATUS_META = {
     "uploaded": ("Uploaded", "pill-ok"),
     "failed": ("Failed", "pill-fail"),
 }
-LIST_ICON = {
-    "queued": "🕐", "scripting": "✍️", "scripted": "📝", "audio_done": "🎧",
-    "image_done": "🖼️", "video_done": "🎬", "metadata_done": "🏷️",
-    "uploaded": "✅", "failed": "❌",
-}
 
 
 # ---------------- API client ----------------
@@ -88,6 +94,16 @@ def api(method: str, path: str, json: dict | None = None, raw: bool = False):
     return resp.content if raw else resp.json()
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_file(path: str, version: str) -> bytes | None:
+    """Fetch a media file, cached by (path, updated_at) so cards stay fast."""
+    try:
+        resp = requests.get(f"{API}{path}", timeout=30)
+        return resp.content if resp.status_code == 200 else None
+    except requests.RequestException:
+        return None
+
+
 def backend_alive() -> dict | None:
     try:
         return requests.get(f"{API}/health", timeout=5).json()
@@ -95,40 +111,75 @@ def backend_alive() -> dict | None:
         return None
 
 
-# ---------------- sidebar ----------------
-
-with st.sidebar:
-    st.markdown("## 🎙️ Sarvo Studio")
-    health = backend_alive()
-    if health:
-        st.caption(f"🟢 Backend connected · {health['episodes']} episodes")
-    else:
-        st.caption("🔴 Backend offline")
-        st.code("uv run uvicorn main:app --reload", language=None)
-
-    if st.button("➕  New episode", use_container_width=True, type="primary"):
-        st.session_state.pop("episode_id", None)
-        st.rerun()
-
-    st.markdown("#### Episodes")
-    episodes = (api("GET", "/episodes") or []) if health else []
-    if not episodes:
-        st.caption("None yet — create your first one!")
-    for ep in episodes:
-        icon = LIST_ICON.get(ep["status"], "•")
-        short = ep["topic"][:34] + ("…" if len(ep["topic"]) > 34 else "")
-        selected = st.session_state.get("episode_id") == ep["id"]
-        label = f"{icon}  {short}"
-        if st.button(label, key=f"pick_{ep['id']}", use_container_width=True,
-                     type="secondary" if not selected else "primary"):
-            st.session_state["episode_id"] = ep["id"]
-            st.rerun()
+def goto(view: str) -> None:
+    st.session_state["view"] = view
+    st.rerun()
 
 
-# ---------------- home: create an episode ----------------
+# ---------------- shared: top bar ----------------
+
+def render_topbar(health: dict | None) -> None:
+    status = (f"🟢 Backend connected · {health['episodes']} episodes"
+              if health else "🔴 Backend offline — run: uv run uvicorn main:app --reload")
+    st.markdown(
+        f"<div class='topbar'><span class='brand'>🎙️ Sarvo Podcast Studio</span>"
+        f"<span class='backend'>{status}</span></div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ---------------- home: create button + history gallery ----------------
+
+def episode_progress(ep: dict) -> float:
+    done = sum([ep["has_blueprint"], ep["has_script"], ep["has_audio"], ep["has_image"],
+                ep["has_video"], ep["has_metadata"], bool(ep["youtube_video_id"])])
+    return done / 7
+
 
 def render_home() -> None:
-    st.markdown("# What should today's episode be about?")
+    _, mid, _ = st.columns([1, 1.2, 1])
+    with mid:
+        if st.button("➕  Create New Video", type="primary", use_container_width=True):
+            goto("create")
+
+    st.markdown("### Recent videos")
+    episodes = api("GET", "/episodes") or []
+    if not episodes:
+        st.info("Nothing here yet — press **Create New Video** to make your first episode!")
+        return
+
+    for row_start in range(0, len(episodes), 4):
+        cols = st.columns(4)
+        for col, ep in zip(cols, episodes[row_start:row_start + 4]):
+            with col.container(border=True):
+                thumb = None
+                if ep["has_image"]:
+                    thumb = cached_file(f"/episodes/{ep['id']}/thumbnail/file",
+                                        ep["updated_at"])
+                if thumb:
+                    st.image(thumb, use_container_width=True)
+                else:
+                    st.markdown("<div class='card-ph'>🎙️</div>", unsafe_allow_html=True)
+
+                short = ep["topic"][:64] + ("…" if len(ep["topic"]) > 64 else "")
+                st.markdown(f"<div class='card-title'>{short}</div>",
+                            unsafe_allow_html=True)
+                label, klass = STATUS_META.get(ep["status"], (ep["status"], "pill-idle"))
+                st.markdown(f"<span class='pill {klass}'>{label}</span>",
+                            unsafe_allow_html=True)
+                st.progress(episode_progress(ep))
+                if st.button("Open →", key=f"open_{ep['id']}", use_container_width=True):
+                    st.session_state["episode_id"] = ep["id"]
+                    goto("episode")
+
+
+# ---------------- create view ----------------
+
+def render_create() -> None:
+    if st.button("← Back"):
+        goto("home")
+
+    st.markdown("## What should this episode be about?")
     st.caption("Give a topic with a built-in hook — a secret, a mistake, a 'why' — "
                "and the AI strategist will do the rest.")
 
@@ -142,6 +193,18 @@ def render_home() -> None:
 
     topic = st.text_area("Episode topic", key="topic_draft", height=90,
                          placeholder="e.g. Why Smart People Stay Poor | Easy English Podcast")
+
+    context = st.text_area(
+        "Your knowledge about this topic (optional)",
+        key="context_draft", height=170,
+        placeholder=("Know this topic well? Paste your notes, facts, examples or "
+                     "explanations here — the AI will build the episode from YOUR "
+                     "knowledge instead of only its own.\n\ne.g. for RAG: 'RAG = "
+                     "Retrieval-Augmented Generation. The three steps are indexing, "
+                     "retrieval, generation. Common mistake: chunk sizes too big…'"),
+    )
+    st.caption("💡 Leave it empty and the AI uses its general knowledge.")
+
     col1, col2 = st.columns([2, 1])
     minutes = col1.slider("Video length (minutes)", 1.0, 30.0, 5.0, 0.5)
     col2.markdown("<br>", unsafe_allow_html=True)
@@ -149,26 +212,17 @@ def render_home() -> None:
                          disabled=not topic.strip())
 
     if create and topic.strip():
-        ep = api("POST", "/episodes", {"topic": topic.strip(), "duration_minutes": minutes})
+        ep = api("POST", "/episodes", {
+            "topic": topic.strip(),
+            "duration_minutes": minutes,
+            "context": context.strip() or None,
+        })
         if ep:
             st.session_state["episode_id"] = ep["id"]
-            st.rerun()
-
-    st.divider()
-    st.markdown("#### How it works")
-    st.markdown(
-        "1. 🧠 **Plan** — AI designs titles, the hook, and the outline &nbsp;→&nbsp; "
-        "2. 📝 **Script** — the full two-host conversation &nbsp;→&nbsp; "
-        "3. 🎧 **Audio** — human-sounding voices &nbsp;→&nbsp; "
-        "4. 🖼️ **Image** — topic thumbnail &nbsp;→&nbsp; "
-        "5. 🎬 **Video** — captions + waveform &nbsp;→&nbsp; "
-        "6. 🏷️ **Package** — title/description/tags &nbsp;→&nbsp; "
-        "7. 🚀 **Upload** — to YouTube (unlisted).\n\n"
-        "Each step unlocks when the previous one is done. You review everything."
-    )
+            goto("episode")
 
 
-# ---------------- episode page ----------------
+# ---------------- episode wizard ----------------
 
 def step_state(ep: dict) -> list[dict]:
     """The 7 steps with done/unlocked flags — the single source of gating truth."""
@@ -195,7 +249,6 @@ def render_header(ep: dict, steps: list[dict]) -> None:
         unsafe_allow_html=True,
     )
 
-    # step progress row
     html = "<div class='steps'>"
     next_marked = False
     for i, s in enumerate(steps, 1):
@@ -208,6 +261,10 @@ def render_header(ep: dict, steps: list[dict]) -> None:
         html += f"<div class='step {klass}'>{i}. {s['icon']} {s['name']}</div>"
     st.markdown(html + "</div>", unsafe_allow_html=True)
 
+    if ep.get("user_context"):
+        with st.expander("📚 Your knowledge for this episode (the AI grounds the content in this)"):
+            st.markdown(ep["user_context"])
+
     if ep["status"] == "failed" and ep.get("error"):
         st.error(f"Last run failed — **{ep['error']}**\n\n"
                  "Open the step below and press its Generate button to retry.")
@@ -218,6 +275,9 @@ def locked_notice(step_num: int, requirement: str) -> None:
 
 
 def render_episode(ep_id: str) -> None:
+    if st.button("← Back to all videos"):
+        goto("home")
+
     ep = api("GET", f"/episodes/{ep_id}")
     if not ep:
         return
@@ -332,7 +392,6 @@ def render_episode(ep_id: str) -> None:
                     col_b.image(bg, caption="Video background (brand top-left)")
                 st.divider()
 
-            # --- Your ready-made designs from assets/ ---
             assets = api("GET", "/assets") or {}
             presets = assets.get("thumbnails", [])
             st.markdown("##### 🎨 Your designs (assets folder — free, instant)")
@@ -341,7 +400,7 @@ def render_episode(ep_id: str) -> None:
                            "automatically. The background below is used in every video.")
                 cols = st.columns(len(presets))
                 for col, name in zip(cols, presets):
-                    img_bytes = api("GET", f"/assets/thumbnail/{name}/file", raw=True)
+                    img_bytes = cached_file(f"/assets/thumbnail/{name}/file", name)
                     if img_bytes:
                         col.image(img_bytes, caption=name)
                     if col.button("✅ Use this design", key=f"preset_{name}",
@@ -355,12 +414,11 @@ def render_episode(ep_id: str) -> None:
 
             if assets.get("background"):
                 with st.expander("👀 Preview the fixed video background"):
-                    bg_prev = api("GET", "/assets/background/file", raw=True)
+                    bg_prev = cached_file("/assets/background/file", "bg")
                     if bg_prev:
                         st.image(bg_prev, caption="assets/background.png — used in "
                                                    "every video (brand added top-left)")
 
-            # --- Or AI-generate a fresh design ---
             st.divider()
             st.markdown("##### 🤖 Or let AI paint a new design (~$0.06)")
             if st.button("🖼️ Generate with AI", key="im_gen"):
@@ -448,7 +506,13 @@ def render_episode(ep_id: str) -> None:
 
 # ---------------- router ----------------
 
-if st.session_state.get("episode_id"):
+health = backend_alive()
+render_topbar(health)
+
+view = st.session_state.get("view", "home")
+if view == "episode" and st.session_state.get("episode_id"):
     render_episode(st.session_state["episode_id"])
+elif view == "create":
+    render_create()
 else:
     render_home()

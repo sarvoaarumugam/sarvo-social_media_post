@@ -42,8 +42,8 @@ system: |
   Think like this: "Why would someone who has never heard of this channel click this,
   stay 10 minutes, and then send it to a friend?" Every element must answer that.
 
-# Placeholders: $topic
+# Placeholders: $topic $context
 user: |
   Topic: $topic
-
+  $context
   Build the full episode blueprint now.
