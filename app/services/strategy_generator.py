@@ -16,6 +16,7 @@ from openai import AsyncOpenAI
 
 from app.core import prompts
 from app.core.config import get_settings
+from app.core.llm import temperature_kwargs
 from app.core.pricing import text_cost
 from app.models.episode import Blueprint, Episode
 
@@ -65,7 +66,7 @@ async def generate_blueprint(
 
     completion = await client.chat.completions.parse(
         model=model,
-        temperature=0.9,  # strategy benefits from bolder ideas
+        **temperature_kwargs(model, 0.9),  # strategy benefits from bolder ideas
         messages=[
             {
                 "role": "system",

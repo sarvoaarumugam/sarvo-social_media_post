@@ -5,13 +5,16 @@ they are intentionally in one obvious place. If a model isn't listed, cost falls
 back to 0.0 (tokens are still logged by the caller).
 """
 
-# Text models: (input_per_1m, output_per_1m)
+# Text models: (input_per_1m, output_per_1m). More specific ids first so prefix
+# matching (see text_cost) resolves to the right entry.
 TEXT_PRICES: dict[str, dict[str, float]] = {
-    "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gpt-5.5": {"input": 5.00, "output": 30.00},
+    "gpt-5.2": {"input": 0.875, "output": 7.00},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "gpt-4.1": {"input": 2.00, "output": 8.00},
+    "gpt-4o": {"input": 2.50, "output": 10.00},
     "gpt-4.1-mini": {"input": 0.40, "output": 1.60},
     "gpt-4.1-nano": {"input": 0.10, "output": 0.40},
+    "gpt-4.1": {"input": 2.00, "output": 8.00},
 }
 
 

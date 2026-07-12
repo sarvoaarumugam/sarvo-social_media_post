@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from app.core import prompts
 from app.core.config import get_settings
+from app.core.llm import temperature_kwargs
 from app.core.pricing import text_cost
 from app.models.episode import Episode, EpisodeMetadata, EpisodeStatus
 from app.services.strategy_generator import blueprint_to_text, load_style_dna
@@ -93,7 +94,7 @@ async def generate_metadata(episode: Episode) -> MetadataResult:
     client = AsyncOpenAI(api_key=settings.openai_api_key)
     completion = await client.chat.completions.parse(
         model=model,
-        temperature=0.7,
+        **temperature_kwargs(model, 0.7),
         messages=[
             {
                 "role": "system",

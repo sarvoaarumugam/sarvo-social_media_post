@@ -210,6 +210,10 @@ def render_create() -> None:
     col2.markdown("<br>", unsafe_allow_html=True)
     create = col2.button("🚀 Create episode", type="primary", use_container_width=True,
                          disabled=not topic.strip())
+    if minutes > 15:
+        col1.caption("⚠️ Over 15 min needs a YouTube channel with 'Intermediate "
+                     "features' enabled (youtube.com/features), or the upload gets "
+                     "removed. Keep it ≤15 min until that's active.")
 
     if create and topic.strip():
         ep = api("POST", "/episodes", {
@@ -491,6 +495,19 @@ def render_episode(ep_id: str) -> None:
                 st.success(f"Uploaded! 🎉  Watch: {up['url']}")
                 st.caption(f"Privacy: {up['privacy']} — make it public from YouTube Studio "
                            "when you're happy with it.")
+                with st.expander("⚠️ Was the video removed or not showing? Upload again"):
+                    st.markdown(
+                        "If YouTube removed it (e.g. it was over 15 min before your "
+                        "channel's *Intermediate features* were active), you can upload "
+                        "a **fresh copy** now. This creates a NEW YouTube video — delete "
+                        "the old dead one from YouTube Studio afterwards."
+                    )
+                    if st.button("🔁 Upload a fresh copy to YouTube"):
+                        with st.spinner("Re-uploading…"):
+                            res = api("POST", f"/episodes/{ep_id}/upload")
+                        if res:
+                            st.balloons()
+                            st.rerun()
             else:
                 st.caption("Publishes to YouTube as UNLISTED (only people with the link "
                            "can watch).")

@@ -21,6 +21,7 @@ from openai import AsyncOpenAI
 
 from app.core import prompts
 from app.core.config import get_settings
+from app.core.llm import temperature_kwargs
 from app.core.pricing import text_cost
 from app.models.episode import Blueprint, DialogueTurn, Episode, EpisodeStatus
 from app.schemas.script import GeneratedScript
@@ -174,7 +175,7 @@ async def generate_script(
         nonlocal in_tok, out_tok
         completion = await client.chat.completions.parse(
             model=model,
-            temperature=temperature,
+            **temperature_kwargs(model, temperature),
             messages=messages,
             response_format=GeneratedScript,
         )

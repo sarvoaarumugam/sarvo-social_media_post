@@ -140,7 +140,7 @@ class Settings(BaseSettings):
     # --- YouTube OAuth (desktop app) ---
     youtube_client_secret_file: str = "client_secret.json"
     youtube_token_file: str = "token.json"
-    youtube_category_id: str = "27"  # 27 = Education (fits ESL); swappable per niche
+    youtube_category_id: str = "28"  # 28 = Science & Technology
     youtube_made_for_kids: bool = False
 
 

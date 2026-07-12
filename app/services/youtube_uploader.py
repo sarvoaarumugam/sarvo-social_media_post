@@ -22,6 +22,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 from PIL import Image
 
@@ -103,8 +104,19 @@ def _upload_sync(episode: Episode) -> str:
             )
             youtube.thumbnails().set(videoId=video_id, media_body=thumb).execute()
             logger.info("Thumbnail set for %s", video_id)
-        except Exception:  # noqa: BLE001
-            logger.exception("Thumbnail failed for %s (video is fine)", video_id)
+        except HttpError as exc:
+            if exc.resp.status == 403:
+                logger.warning(
+                    "Custom thumbnail rejected for %s: the channel isn't verified for "
+                    "advanced features yet. Enable 'Intermediate features' at "
+                    "youtube.com/features (can take up to 24h after phone verification). "
+                    "The video uploaded fine.",
+                    video_id,
+                )
+            else:
+                logger.warning("Thumbnail failed for %s (video is fine): %s", video_id, exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Thumbnail failed for %s (video is fine): %s", video_id, exc)
 
     return video_id
 
