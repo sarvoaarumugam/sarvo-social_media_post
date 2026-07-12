@@ -21,26 +21,28 @@ class OpenAIImageProvider(ImageProvider):
         self._fallback = fallback_model
         self.last_model: str = model  # which model actually produced the last image
 
-    async def generate(self, prompt: str, *, quality: str) -> bytes:
+    async def generate(self, prompt: str, *, quality: str, aspect: str = "landscape") -> bytes:
         try:
-            return await self._call(self._model, prompt, quality)
+            return await self._call(self._model, prompt, quality, aspect)
         except Exception as exc:  # noqa: BLE001 - try the fallback before giving up
             if self._fallback and self._fallback != self._model:
                 logger.warning(
                     "Image model %s failed (%s); falling back to %s",
                     self._model, exc, self._fallback,
                 )
-                return await self._call(self._fallback, prompt, quality)
+                return await self._call(self._fallback, prompt, quality, aspect)
             raise
 
-    async def _call(self, model: str, prompt: str, quality: str) -> bytes:
+    async def _call(self, model: str, prompt: str, quality: str, aspect: str) -> bytes:
         kwargs: dict = {"model": model, "prompt": prompt, "n": 1}
         if model.startswith("gpt-image"):
-            kwargs["size"] = "1536x1024"  # landscape
+            sizes = {"landscape": "1536x1024", "square": "1024x1024", "portrait": "1024x1536"}
+            kwargs["size"] = sizes.get(aspect, "1536x1024")
             kwargs["quality"] = quality if quality in {"low", "medium", "high", "auto"} else "medium"
             kwargs["output_format"] = "png"
         else:  # dall-e-3
-            kwargs["size"] = "1792x1024"  # ~16:9
+            sizes = {"landscape": "1792x1024", "square": "1024x1024", "portrait": "1024x1792"}
+            kwargs["size"] = sizes.get(aspect, "1792x1024")
             kwargs["quality"] = "hd" if quality in {"high", "hd", "medium"} else "standard"
             kwargs["response_format"] = "b64_json"
 

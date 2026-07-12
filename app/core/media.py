@@ -41,6 +41,10 @@ def video_path_for(episode_id: str) -> Path:
     return _sub("video") / f"{episode_id}.mp4"
 
 
+def linkedin_image_path_for(post_id: str) -> Path:
+    return _sub("linkedin") / f"{post_id}.png"
+
+
 def _sub(name: str) -> Path:
     d = media_root() / name
     d.mkdir(parents=True, exist_ok=True)

@@ -128,6 +128,13 @@ class Settings(BaseSettings):
     caption_host2_color: str = "&H00BFD42D"  # teal (#2DD4BF)
     caption_max_words: int = 5  # words shown per caption chunk
 
+    # --- LinkedIn post (separate content type: caption + square image) ---
+    linkedin_image_size: int = 1200  # square px for the post graphic
+    linkedin_image_style: str = (
+        "clean, modern, professional tech/AI graphic; bold minimal shapes; "
+        "high contrast; premium editorial look suitable for LinkedIn"
+    )
+
     # --- MongoDB Atlas ---
     mongodb_uri: str
     mongodb_db: str = "sarvo_podcast"

@@ -137,17 +137,17 @@ def episode_progress(ep: dict) -> float:
 
 
 def render_home() -> None:
-    _, mid, _ = st.columns([1, 1.2, 1])
-    with mid:
-        if st.button("➕  Create New Video", type="primary", use_container_width=True):
-            goto("create")
+    b1, b2 = st.columns(2)
+    if b1.button("🎬  Create New Video", type="primary", use_container_width=True):
+        goto("create")
+    if b2.button("💼  Create LinkedIn Post", type="primary", use_container_width=True):
+        goto("create_linkedin")
 
-    st.markdown("### Recent videos")
+    # --- Video gallery ---
+    st.markdown("### 🎬 Recent videos")
     episodes = api("GET", "/episodes") or []
     if not episodes:
-        st.info("Nothing here yet — press **Create New Video** to make your first episode!")
-        return
-
+        st.info("No videos yet — press **Create New Video** to make your first episode!")
     for row_start in range(0, len(episodes), 4):
         cols = st.columns(4)
         for col, ep in zip(cols, episodes[row_start:row_start + 4]):
@@ -160,17 +160,41 @@ def render_home() -> None:
                     st.image(thumb, use_container_width=True)
                 else:
                     st.markdown("<div class='card-ph'>🎙️</div>", unsafe_allow_html=True)
-
                 short = ep["topic"][:64] + ("…" if len(ep["topic"]) > 64 else "")
-                st.markdown(f"<div class='card-title'>{short}</div>",
-                            unsafe_allow_html=True)
+                st.markdown(f"<div class='card-title'>{short}</div>", unsafe_allow_html=True)
                 label, klass = STATUS_META.get(ep["status"], (ep["status"], "pill-idle"))
-                st.markdown(f"<span class='pill {klass}'>{label}</span>",
-                            unsafe_allow_html=True)
+                st.markdown(f"<span class='pill {klass}'>{label}</span>", unsafe_allow_html=True)
                 st.progress(episode_progress(ep))
                 if st.button("Open →", key=f"open_{ep['id']}", use_container_width=True):
                     st.session_state["episode_id"] = ep["id"]
                     goto("episode")
+
+    # --- LinkedIn gallery ---
+    posts = api("GET", "/linkedin") or []
+    if posts:
+        st.markdown("### 💼 Recent LinkedIn posts")
+        for row_start in range(0, len(posts), 4):
+            cols = st.columns(4)
+            for col, po in zip(cols, posts[row_start:row_start + 4]):
+                with col.container(border=True):
+                    img = None
+                    if po["has_image"]:
+                        img = cached_file(f"/linkedin/{po['id']}/image/file", po["updated_at"])
+                    if img:
+                        st.image(img, use_container_width=True)
+                    else:
+                        st.markdown("<div class='card-ph'>💼</div>", unsafe_allow_html=True)
+                    short = po["brief"][:64] + ("…" if len(po["brief"]) > 64 else "")
+                    st.markdown(f"<div class='card-title'>{short}</div>",
+                                unsafe_allow_html=True)
+                    done = "pill-ok" if po["has_image"] else "pill-run"
+                    txt = "Ready" if po["has_image"] else (
+                        "Caption ready" if po["has_caption"] else "Draft")
+                    st.markdown(f"<span class='pill {done}'>{txt}</span>",
+                                unsafe_allow_html=True)
+                    if st.button("Open →", key=f"lopen_{po['id']}", use_container_width=True):
+                        st.session_state["post_id"] = po["id"]
+                        goto("linkedin")
 
 
 # ---------------- create view ----------------
@@ -224,6 +248,111 @@ def render_create() -> None:
         if ep:
             st.session_state["episode_id"] = ep["id"]
             goto("episode")
+
+
+# ---------------- LinkedIn: create + wizard ----------------
+
+def render_create_linkedin() -> None:
+    if st.button("← Back"):
+        goto("home")
+
+    st.markdown("## 💼 New LinkedIn post")
+    st.caption("Step 1 is the caption. Tell the AI what you want the post to be about — "
+               "an AI update, a tip, a hot take, a tool you tried.")
+    brief = st.text_area(
+        "What should this post be about?", height=150,
+        placeholder="e.g. Explain what MCP (Model Context Protocol) is and why it matters "
+                    "for AI agents — make it simple and exciting for non-technical people.",
+    )
+    if st.button("✍️ Create & write caption", type="primary", disabled=not brief.strip()):
+        post = api("POST", "/linkedin", {"brief": brief.strip()})
+        if post:
+            with st.spinner("Writing the caption…"):
+                api("POST", f"/linkedin/{post['id']}/caption")
+            st.session_state["post_id"] = post["id"]
+            goto("linkedin")
+
+
+def render_linkedin(post_id: str) -> None:
+    if st.button("← Back to all posts"):
+        goto("home")
+
+    po = api("GET", f"/linkedin/{post_id}")
+    if not po:
+        return
+
+    st.markdown(f"## 💼 {po['brief'][:80]}")
+    if po.get("error"):
+        st.error(f"Last run failed — {po['error']}")
+
+    tabs = st.tabs([
+        f"{'✅' if po['has_caption'] else '📝'} 1. Caption",
+        f"{'✅' if po['has_image'] else '🖼️'} 2. Image",
+        "📋 3. Post it",
+    ])
+
+    # ---- 1. Caption ----
+    with tabs[0]:
+        st.caption("Your LinkedIn caption. Edit it freely, or regenerate a new one.")
+        verb = "Regenerate caption" if po["has_caption"] else "Generate caption"
+        if st.button(f"✍️ {verb}", type="primary", key="lcap_gen"):
+            with st.spinner("Writing…"):
+                api("POST", f"/linkedin/{post_id}/caption")
+            st.rerun()
+        if po["caption"]:
+            edited = st.text_area("Caption", po["caption"], height=340, key="lcap_edit")
+            if st.button("💾 Save caption edits"):
+                if api("PUT", f"/linkedin/{post_id}/caption", {"caption": edited}):
+                    st.success("Saved.")
+                    st.rerun()
+
+    # ---- 2. Image ----
+    with tabs[1]:
+        if not po["has_caption"]:
+            st.info("🔒 Write the caption first (step 1).")
+        else:
+            st.caption("Describe the visual you want. The AI uses your caption + this "
+                       "direction to make a square graphic.")
+            img_brief = st.text_input(
+                "Visual direction (optional)",
+                value=po.get("image_brief") or "",
+                placeholder="e.g. a glowing neural network connecting apps, dark blue, minimal",
+                key="limg_brief",
+            )
+            verb = "Regenerate image" if po["has_image"] else "Generate image"
+            if st.button(f"🖼️ {verb}", type="primary", key="limg_gen"):
+                with st.spinner("Painting… (~1 min)"):
+                    api("POST", f"/linkedin/{post_id}/image", {"brief": img_brief.strip()})
+                st.rerun()
+
+            if po["has_image"]:
+                img = api("GET", f"/linkedin/{post_id}/image/file", raw=True)
+                if img:
+                    st.image(img, caption="LinkedIn post image (1:1)")
+                fb = st.text_input("Change it? Describe what to adjust:",
+                                   placeholder="e.g. brighter, add a robot, more orange",
+                                   key="limg_fb")
+                if st.button("🔄 Regenerate with feedback", disabled=not fb.strip()):
+                    with st.spinner("Repainting…"):
+                        api("POST", f"/linkedin/{post_id}/image/regenerate",
+                            {"feedback": fb.strip()})
+                    st.rerun()
+
+    # ---- 3. Post it (manual) ----
+    with tabs[2]:
+        if not (po["has_caption"] and po["has_image"]):
+            st.info("Finish the caption and image first.")
+        else:
+            st.caption("LinkedIn has no easy posting API, so post manually — it takes 20s:")
+            st.markdown("1. **Copy the caption** below  \n"
+                        "2. **Download the image**  \n"
+                        "3. Open LinkedIn → *Start a post* → paste caption → add the image "
+                        "→ **Post**")
+            st.text_area("Caption (copy this)", po["caption"], height=300, key="lfinal_cap")
+            img = api("GET", f"/linkedin/{post_id}/image/file", raw=True)
+            if img:
+                st.download_button("⬇️ Download image", img,
+                                   file_name=f"linkedin-{post_id}.png", mime="image/png")
 
 
 # ---------------- episode wizard ----------------
@@ -529,7 +658,11 @@ render_topbar(health)
 view = st.session_state.get("view", "home")
 if view == "episode" and st.session_state.get("episode_id"):
     render_episode(st.session_state["episode_id"])
+elif view == "linkedin" and st.session_state.get("post_id"):
+    render_linkedin(st.session_state["post_id"])
 elif view == "create":
     render_create()
+elif view == "create_linkedin":
+    render_create_linkedin()
 else:
     render_home()

@@ -9,6 +9,7 @@ from pymongo import AsyncMongoClient
 
 from app.core.config import get_settings
 from app.models.episode import Episode
+from app.models.linkedin import LinkedInPost
 
 logger = logging.getLogger("app.db")
 
@@ -23,7 +24,9 @@ async def init_db() -> AsyncMongoClient:
 
     from beanie import init_beanie
 
-    await init_beanie(database=_client[settings.mongodb_db], document_models=[Episode])
+    await init_beanie(
+        database=_client[settings.mongodb_db], document_models=[Episode, LinkedInPost]
+    )
     logger.info("MongoDB connected: db=%s", settings.mongodb_db)
     return _client
 
